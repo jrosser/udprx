@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <assert.h>
 
 #include <libdaemon/dlog.h>
 
@@ -19,9 +20,23 @@
 static int logfd=-1;
 static int lasthour=-1;
 
+//create path
+int mkpath(char* file_path, mode_t mode) {
+  assert(file_path && *file_path);
+  char* p;
+  for (p=strchr(file_path+1, '/'); p; p=strchr(p+1, '/')) {
+    *p='\0';
+    if (mkdir(file_path, mode)==-1) {
+      if (errno!=EEXIST) { *p='/'; return -1; }
+    }
+    *p='/';
+  }
+  return 0;
+}
+
 static void openlogfile()
 {
-  const char *dir="/var/log/cmzone/raw/";
+  const char *dir="/var/log/udprx/raw/";
   char timestr[80];
   char filename[80];
   int ret;
@@ -32,17 +47,14 @@ static void openlogfile()
   //filename is YYYY:DD:MM:HH
   t = time(NULL);
   gmtime_r(&t, &tmp);
-  strftime(timestr, 80, "%F:%H", &tmp);
+  strftime(timestr, 80, "%Y/%m/%F-%H", &tmp);
 
   //combine directory and filename
   snprintf(filename, 80, "%s%s", dir, timestr);
 
   //create directory
-  ret=mkdir("/var/log/cmzone", S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-  if(ret<0) daemon_log(LOG_ERR, "mkdir cmzone failed: %s", strerror(errno));
-
-  ret=mkdir("/var/log/cmzone/raw", S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-  if(ret<0) daemon_log(LOG_ERR, "mkdir cmzone/raw failed: %s", strerror(errno));
+  ret=mkpath(filename, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+  if(ret<0) daemon_log(LOG_ERR, "mkpath failed: %s", strerror(errno));
 
   //open file
   logfd=open(filename,
